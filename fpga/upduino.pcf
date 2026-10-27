@@ -1,0 +1,9 @@
+# UPduino v3.x, iCE40UP5K-SG48. Verify pins against your board revision.
+set_io scl        2
+set_io sda        3
+set_io smbalert_n 4
+set_io en_out     6
+set_io pg_out     9
+set_io led_g      39
+set_io led_b      40
+set_io led_r      41

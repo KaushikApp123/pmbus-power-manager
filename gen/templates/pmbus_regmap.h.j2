@@ -1,0 +1,55 @@
+/* AUTO-GENERATED from {{ source }} by gen/gen_regmap.py. Do not edit. */
+#ifndef PMBUS_REGMAP_H
+#define PMBUS_REGMAP_H
+
+#include <stdint.h>
+
+#define PMBUS_DEFAULT_ADDR      0x{{ ip.default_address | hex2 }}u
+#define PMBUS_VOUT_EXPONENT     ({{ ip.vout_exponent }})
+
+/* Command codes */
+{% for r in regs %}
+#define PMBUS_{{ "%-24s"|format(r.name) }} 0x{{ r.code | hex2 }}u
+{% endfor %}
+
+/* Reset / constant values */
+{% for r in regs if r.access in ("rw", "ro_const") %}
+#define PMBUS_RST_{{ "%-20s"|format(r.name) }} 0x{{ r.reset | hex4 if r.size == 2 else r.reset | hex2 }}u
+{% endfor %}
+
+typedef enum {
+    PMBUS_ACC_RW = 0,
+    PMBUS_ACC_RO_CONST = 1,
+    PMBUS_ACC_RO_HW = 2,
+    PMBUS_ACC_W1C_HW = 3,
+    PMBUS_ACC_SEND = 4
+} pmbus_access_t;
+
+typedef struct {
+    const char *name;
+    uint8_t code;
+    uint8_t size;           /* data bytes */
+    pmbus_access_t access;
+    uint16_t reset;
+} pmbus_reg_info_t;
+
+#define PMBUS_NUM_REGS {{ regs | length }}u
+
+static const pmbus_reg_info_t pmbus_regs[PMBUS_NUM_REGS] = {
+{% for r in regs %}
+    { "{{ r.name }}", 0x{{ r.code | hex2 }}u, {{ r.size }}u, PMBUS_ACC_{{ r.access | upper }}, 0x{{ r.reset | hex4 }}u },
+{% endfor %}
+};
+
+/* LINEAR16 helpers: millivolts <-> register value */
+static inline uint16_t pmbus_mv_to_linear16(uint32_t mv)
+{
+    return (uint16_t)(((mv << {{ -ip.vout_exponent }}) + 500u) / 1000u);
+}
+
+static inline uint32_t pmbus_linear16_to_mv(uint16_t v)
+{
+    return ((uint32_t)v * 1000u + (1u << {{ -ip.vout_exponent - 1 }})) >> {{ -ip.vout_exponent }};
+}
+
+#endif /* PMBUS_REGMAP_H */

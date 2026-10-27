@@ -1,0 +1,42 @@
+<!-- AUTO-GENERATED from {{ source }} by gen/gen_regmap.py. Do not edit. -->
+# Register Map
+
+Default 7-bit address: `0x{{ ip.default_address | hex2 }}`.
+Voltages use LINEAR16 with exponent {{ ip.vout_exponent }} (1 LSB = {{ "%.3f" | format(ip.vout_lsb_mv) }} mV).
+Words are sent low byte first. PEC (CRC-8, poly 0x07) is optional on every transaction.
+
+## Summary
+
+| Code | Name | Access | Bytes | Reset | WP allowed at |
+|------|------|--------|-------|-------|---------------|
+{% for r in regs %}
+| `0x{{ r.code | hex2 }}` | [{{ r.name }}](#{{ r.lname }}) | {{ r.access }} | {{ r.size }} | {% if r.access in ("rw", "ro_const") %}`0x{{ r.reset | hex4 if r.size == 2 else r.reset | hex2 }}`{% else %}-{% endif %} | {% if r.access == "rw" %}0x00{% for l in r.wp_allow %}, 0x{{ l | hex2 }}{% endfor %}{% else %}-{% endif %} |
+{% endfor %}
+
+Access types: `rw` stored, `ro_const` constant, `ro_hw` live hardware value,
+`w1c_hw` hardware status (write 1 to clear), `send` send-byte command with no data.
+
+## Details
+{% for r in regs %}
+
+### {{ r.name }}
+
+Code `0x{{ r.code | hex2 }}`, {{ r.access }}, {{ r.size }} data byte{{ "s" if r.size != 1 else "" }}.
+{% if r.access in ("rw", "ro_const") %}
+Reset `0x{{ r.reset | hex4 if r.size == 2 else r.reset | hex2 }}`{% if r.size == 2 and "VOUT" in r.name and r.reset %} ({{ "%.3f" | format(r.reset * ip.vout_lsb_mv / 1000.0) }} V){% endif %}.
+{% endif %}
+
+{{ r.desc }}
+{% if r.allowed %}
+
+Legal values: {% for v in r.allowed %}`0x{{ v | hex2 }}`{{ ", " if not loop.last else "" }}{% endfor %}. Anything else sets STATUS_CML.INVALID_DATA.
+{% endif %}
+{% if r.fields %}
+
+| Bits | Field | Description |
+|------|-------|-------------|
+{% for f in r.fields %}
+| {{ f.bits }} | {{ f.name }} | {{ f.desc }} |
+{% endfor %}
+{% endif %}
+{% endfor %}

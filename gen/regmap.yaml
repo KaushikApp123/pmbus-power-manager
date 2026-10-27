@@ -1,0 +1,182 @@
+# PMBus Power Manager register map.
+# This file is the single source of truth. Run `make gen` after editing it.
+#
+# access types
+#   rw        stored in the register file, host can read and write
+#   ro_const  constant value, read only
+#   ro_hw     value comes from hardware, read only
+#   w1c_hw    status owned by hardware, host writes 1s to clear bits
+#   send      PMBus "send byte" command, no data, produces a strobe
+#
+# size        data bytes (0, 1 or 2). Words are sent low byte first.
+# wp_allow    WRITE_PROTECT levels that still allow writing this command.
+#             Writes are always allowed when WRITE_PROTECT = 0x00.
+# allowed     optional list of legal write values. Other values are rejected
+#             and flagged as CML invalid data.
+# test_values optional values the testbench writes. Defaults to `allowed`,
+#             or 0x55/0xAA patterns.
+
+ip:
+  name: pmbus_power_manager
+  default_address: 0x40
+  vout_exponent: -9          # LINEAR16, 1 LSB = 1/512 V (about 1.95 mV)
+
+registers:
+  - name: OPERATION
+    code: 0x01
+    access: rw
+    size: 1
+    reset: 0x00
+    wp_allow: [0x40, 0x20]
+    allowed: [0x00, 0x40, 0x80]
+    test_values: [0x80, 0x40, 0x00]
+    desc: "Output on/off. 0x80 = on, 0x00 = immediate off, 0x40 = soft off (treated as off). Turning off clears a latched fault."
+    fields:
+      - {bits: "7", name: ON, desc: "1 = output enabled"}
+
+  - name: CLEAR_FAULTS
+    code: 0x03
+    access: send
+    size: 0
+    desc: "Clears all STATUS bits and releases SMBALERT#. Bits set again if the fault is still present. Does not restart a latched-off output."
+
+  - name: WRITE_PROTECT
+    code: 0x10
+    access: rw
+    size: 1
+    reset: 0x00
+    wp_allow: [0x80, 0x40, 0x20]
+    allowed: [0x00, 0x20, 0x40, 0x80]
+    test_values: [0x80, 0x40, 0x20, 0x00]
+    desc: "0x80 = only WRITE_PROTECT writable. 0x40 = also OPERATION. 0x20 = also VOUT_COMMAND. 0x00 = all writable."
+
+  - name: CAPABILITY
+    code: 0x19
+    access: ro_const
+    size: 1
+    reset: 0xB0
+    desc: "PEC supported, 400 kHz max bus speed, SMBALERT# supported."
+    fields:
+      - {bits: "7", name: PEC, desc: "1 = PEC supported"}
+      - {bits: "6:5", name: SPEED, desc: "01 = 400 kHz"}
+      - {bits: "4", name: ALERT, desc: "1 = SMBALERT# supported"}
+
+  - name: VOUT_MODE
+    code: 0x20
+    access: ro_const
+    size: 1
+    reset: 0x17
+    desc: "LINEAR16 mode, exponent -9."
+
+  - name: VOUT_COMMAND
+    code: 0x21
+    access: rw
+    size: 2
+    reset: 0x0699
+    wp_allow: [0x20]
+    desc: "Output voltage setpoint (LINEAR16). Reset = 3.30 V. Exposed on vout_command_o for a regulator or DAC."
+
+  - name: VOUT_OV_FAULT_LIMIT
+    code: 0x40
+    access: rw
+    size: 2
+    reset: 0x0742
+    desc: "Over-voltage fault threshold. Reset = 3.63 V (110%)."
+
+  - name: VOUT_OV_FAULT_RESPONSE
+    code: 0x41
+    access: rw
+    size: 1
+    reset: 0x80
+    desc: "Bits 7:6: 00 = ignore, 01/10 = shut down and latch off, 11 = disable while fault is present (hiccup)."
+
+  - name: VOUT_OV_WARN_LIMIT
+    code: 0x42
+    access: rw
+    size: 2
+    reset: 0x06EE
+    desc: "Over-voltage warning threshold. Reset = 3.47 V (105%)."
+
+  - name: VOUT_UV_WARN_LIMIT
+    code: 0x43
+    access: rw
+    size: 2
+    reset: 0x0645
+    desc: "Under-voltage warning threshold. Reset = 3.13 V (95%)."
+
+  - name: VOUT_UV_FAULT_LIMIT
+    code: 0x44
+    access: rw
+    size: 2
+    reset: 0x05F0
+    desc: "Under-voltage fault threshold. Reset = 2.97 V (90%). Checked only while on and after soft-start blanking."
+
+  - name: VOUT_UV_FAULT_RESPONSE
+    code: 0x45
+    access: rw
+    size: 1
+    reset: 0x80
+    desc: "Same encoding as VOUT_OV_FAULT_RESPONSE."
+
+  - name: STATUS_BYTE
+    code: 0x78
+    access: ro_hw
+    size: 1
+    desc: "Summary status."
+    fields:
+      - {bits: "6", name: "OFF", desc: "Output is off"}
+      - {bits: "5", name: VOUT_OV_FAULT, desc: "Over-voltage fault"}
+      - {bits: "1", name: CML, desc: "Communication fault, see STATUS_CML"}
+      - {bits: "0", name: NONE_OF_THE_ABOVE, desc: "Other VOUT warning or UV fault, see STATUS_VOUT"}
+
+  - name: STATUS_WORD
+    code: 0x79
+    access: ro_hw
+    size: 2
+    desc: "Low byte = STATUS_BYTE."
+    fields:
+      - {bits: "15", name: VOUT, desc: "Any bit set in STATUS_VOUT"}
+      - {bits: "11", name: POWER_GOOD_N, desc: "1 = power is not good"}
+      - {bits: "7:0", name: STATUS_BYTE, desc: "Copy of STATUS_BYTE"}
+
+  - name: STATUS_VOUT
+    code: 0x7A
+    access: w1c_hw
+    size: 1
+    desc: "Output voltage status. Write 1 to clear a bit."
+    fields:
+      - {bits: "7", name: OV_FAULT, desc: "Over-voltage fault"}
+      - {bits: "6", name: OV_WARN, desc: "Over-voltage warning"}
+      - {bits: "5", name: UV_WARN, desc: "Under-voltage warning"}
+      - {bits: "4", name: UV_FAULT, desc: "Under-voltage fault"}
+
+  - name: STATUS_CML
+    code: 0x7E
+    access: w1c_hw
+    size: 1
+    desc: "Communication status. Write 1 to clear a bit."
+    fields:
+      - {bits: "7", name: INVALID_CMD, desc: "Unsupported command, write to a read-only command, or read of a send-byte command"}
+      - {bits: "6", name: INVALID_DATA, desc: "Wrong byte count, illegal value, or write blocked by WRITE_PROTECT"}
+      - {bits: "5", name: PEC_FAIL, desc: "PEC byte did not match"}
+      - {bits: "1", name: OTHER, desc: "SMBus timeout (SCL held low too long)"}
+
+  - name: READ_VOUT
+    code: 0x8B
+    access: ro_hw
+    size: 2
+    desc: "Last sampled output voltage (LINEAR16)."
+
+  - name: PMBUS_REVISION
+    code: 0x98
+    access: ro_const
+    size: 1
+    reset: 0x33
+    desc: "PMBus Part I and Part II revision 1.3."
+
+  - name: MFR_SIM_VOUT
+    code: 0xD0
+    access: rw
+    size: 2
+    reset: 0x0000
+    desc: "Manufacturer specific. FPGA demo only: 0 = plant model follows VOUT_COMMAND, other = force plant voltage to this value (fault injection from the bus)."

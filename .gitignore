@@ -1,0 +1,8 @@
+build/
+fpga/*.json
+fpga/*.asc
+fpga/*.bin
+fpga/*.log
+fpga/timing.json
+*.vcd
+__pycache__/

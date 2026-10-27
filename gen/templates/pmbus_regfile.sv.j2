@@ -1,0 +1,106 @@
+// AUTO-GENERATED from {{ source }} by gen/gen_regmap.py. Do not edit.
+//
+// Command decode, register storage, read mux and write-protect / value checks.
+// The transaction layer (pmbus_core) owns byte counting and PEC; it asks this
+// block what a command code means and pulses wr_en_i to commit a write.
+
+module pmbus_regfile (
+  input  logic        clk,
+  input  logic        rst_n,
+
+  // Lookup for the command currently addressed by the host
+  input  logic [7:0]  cmd_i,
+  output logic        cmd_valid_o,     // command is in the register map
+  output logic        cmd_readable_o,
+  output logic        cmd_writable_o,
+  output logic [1:0]  cmd_size_o,      // data bytes: 0, 1 or 2
+  output logic        cmd_wp_ok_o,     // write allowed at current WRITE_PROTECT level
+  output logic        cmd_value_ok_o,  // wdata_i is a legal value for this command
+  output logic [15:0] rdata_o,
+
+  // Commit
+  input  logic        wr_en_i,
+  input  logic [15:0] wdata_i,
+
+  // Stored registers
+{% for r in regs if r.access == "rw" %}
+  output logic [{{ r.width - 1 }}:0] {{ r.lname }}_q,
+{% endfor %}
+
+  // Hardware-owned values
+{% for r in regs if r.access in ("ro_hw", "w1c_hw") %}
+  input  logic [{{ r.width - 1 }}:0] {{ r.lname }}_i,
+{% endfor %}
+
+  // Write strobes for hardware-owned commands (data on wdata_i)
+{% set strobes = regs | selectattr("access", "in", ["w1c_hw", "send"]) | list %}
+{% for r in strobes %}
+  output logic        {{ r.lname }}_wr{{ "," if not loop.last else "" }}
+{% endfor %}
+);
+
+  logic [7:0] wp_level;
+  assign wp_level = write_protect_q;
+
+  // ---------------------------------------------------------------------------
+  // Decode
+  // ---------------------------------------------------------------------------
+  always_comb begin
+    cmd_valid_o    = 1'b0;
+    cmd_readable_o = 1'b0;
+    cmd_writable_o = 1'b0;
+    cmd_size_o     = 2'd0;
+    cmd_wp_ok_o    = (wp_level == 8'h00);
+    cmd_value_ok_o = 1'b1;
+    rdata_o        = 16'hFFFF;
+    case (cmd_i)
+{% for r in regs %}
+      // {{ r.name }} ({{ r.access }}, {{ r.size }} byte{{ "s" if r.size != 1 else "" }})
+      8'h{{ r.code | hex2 }}: begin
+        cmd_valid_o    = 1'b1;
+        cmd_readable_o = 1'b{{ 1 if r.readable else 0 }};
+        cmd_writable_o = 1'b{{ 1 if r.writable else 0 }};
+        cmd_size_o     = 2'd{{ r.size }};
+{% if r.wp_allow %}
+        cmd_wp_ok_o    = (wp_level == 8'h00){% for l in r.wp_allow %} || (wp_level == 8'h{{ l | hex2 }}){% endfor %};
+{% endif %}
+{% if r.allowed %}
+        cmd_value_ok_o = {% for v in r.allowed %}(wdata_i[{{ r.width - 1 }}:0] == {{ v | sv(r.width) }}){{ " || " if not loop.last else "" }}{% endfor %};
+{% endif %}
+{% if r.access == "rw" %}
+        rdata_o        = {% if r.size == 1 %}{8'h00, {{ r.lname }}_q}{% else %}{{ r.lname }}_q{% endif %};
+{% elif r.access == "ro_const" %}
+        rdata_o        = 16'h{{ r.reset | hex4 }};
+{% elif r.access in ("ro_hw", "w1c_hw") %}
+        rdata_o        = {% if r.size == 1 %}{8'h00, {{ r.lname }}_i}{% else %}{{ r.lname }}_i{% endif %};
+{% endif %}
+      end
+{% endfor %}
+      default: ;
+    endcase
+  end
+
+  // ---------------------------------------------------------------------------
+  // Storage
+  // ---------------------------------------------------------------------------
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+{% for r in regs if r.access == "rw" %}
+      {{ r.lname }}_q <= {{ r.reset | sv(r.width) }};
+{% endfor %}
+    end else if (wr_en_i) begin
+      case (cmd_i)
+{% for r in regs if r.access == "rw" %}
+        8'h{{ r.code | hex2 }}: {{ r.lname }}_q <= wdata_i[{{ r.width - 1 }}:0];
+{% endfor %}
+        default: ;
+      endcase
+    end
+  end
+
+  // Strobes
+{% for r in strobes %}
+  assign {{ r.lname }}_wr = wr_en_i && (cmd_i == 8'h{{ r.code | hex2 }});
+{% endfor %}
+
+endmodule

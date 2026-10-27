@@ -1,0 +1,21 @@
+// AUTO-GENERATED from {{ source }} by gen/gen_regmap.py. Do not edit.
+package pmbus_regmap_pkg;
+
+  localparam logic [6:0] DEFAULT_ADDR = 7'h{{ ip.default_address | hex2 }};
+
+  // Command codes
+{% for r in regs %}
+  localparam logic [7:0] CMD_{{ r.name }} = 8'h{{ r.code | hex2 }};
+{% endfor %}
+
+  // Reset / constant values
+{% for r in regs if r.access in ("rw", "ro_const") %}
+  localparam logic [{{ r.width - 1 }}:0] RST_{{ r.name }} = {{ r.reset | sv(r.width) }};
+{% endfor %}
+
+  // Fault response encodings (bits 7:6 of *_FAULT_RESPONSE)
+  localparam logic [1:0] RESP_IGNORE  = 2'b00;
+  localparam logic [1:0] RESP_HICCUP  = 2'b11;  // off while fault present
+  // 2'b01 and 2'b10 both mean shut down and latch off
+
+endpackage

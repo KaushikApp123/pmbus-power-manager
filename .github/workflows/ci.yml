@@ -1,0 +1,46 @@
+name: ci
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog verilator yosys nextpnr-ice40 fpga-icestorm
+          pip install -r requirements.txt
+
+      - name: Generated files up to date
+        run: make gen-check
+
+      - name: Lint
+        run: make lint
+
+      - name: Simulate
+        run: make sim
+
+      - name: Bus-level check on simulation VCD
+        run: make bus-check
+
+      - name: Firmware host checks
+        run: make fw-test
+
+      - name: Synthesize for iCE40UP5K
+        run: make synth
+
+      - name: Mutation check
+        run: make mutate
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results
+          path: |
+            build/sim.log
+            build/mutate.log
+            fpga/upduino.bin
+            fpga/nextpnr.log

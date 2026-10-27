@@ -1,0 +1,100 @@
+// AUTO-GENERATED from {{ source }} by gen/gen_regmap.py. Do not edit.
+// Register map data for the testbench. Included inside tb_pmbus.
+
+localparam int ACC_RW       = 0;
+localparam int ACC_RO_CONST = 1;
+localparam int ACC_RO_HW    = 2;
+localparam int ACC_W1C_HW   = 3;
+localparam int ACC_SEND     = 4;
+
+localparam int NUM_REGS = {{ regs | length }};
+
+function automatic [7:0] reg_code_at(input int i);
+  case (i)
+{% for r in regs %}
+    {{ loop.index0 }}: return 8'h{{ r.code | hex2 }};
+{% endfor %}
+    default: return 8'h00;
+  endcase
+endfunction
+
+function automatic bit reg_known(input [7:0] c);
+  case (c)
+    {% for r in regs %}8'h{{ r.code | hex2 }}{{ ", " if not loop.last else "" }}{% endfor %}: return 1'b1;
+    default: return 1'b0;
+  endcase
+endfunction
+
+function automatic string reg_name(input [7:0] c);
+  case (c)
+{% for r in regs %}
+    8'h{{ r.code | hex2 }}: return "{{ r.name }}";
+{% endfor %}
+    default: return "UNSUPPORTED";
+  endcase
+endfunction
+
+function automatic int reg_access(input [7:0] c);
+  case (c)
+{% for r in regs %}
+    8'h{{ r.code | hex2 }}: return {{ r.acc_code }};
+{% endfor %}
+    default: return -1;
+  endcase
+endfunction
+
+function automatic int reg_size(input [7:0] c);
+  case (c)
+{% for r in regs %}
+    8'h{{ r.code | hex2 }}: return {{ r.size }};
+{% endfor %}
+    default: return 0;
+  endcase
+endfunction
+
+function automatic [15:0] reg_reset(input [7:0] c);
+  case (c)
+{% for r in regs %}
+    8'h{{ r.code | hex2 }}: return 16'h{{ r.reset | hex4 }};
+{% endfor %}
+    default: return 16'h0000;
+  endcase
+endfunction
+
+function automatic int reg_num_test_values(input [7:0] c);
+  case (c)
+{% for r in regs %}
+    8'h{{ r.code | hex2 }}: return {{ r.test_values | length }};
+{% endfor %}
+    default: return 0;
+  endcase
+endfunction
+
+function automatic [15:0] reg_test_value(input [7:0] c, input int i);
+  case (c)
+{% for r in regs if r.test_values %}
+    8'h{{ r.code | hex2 }}: case (i)
+{% for v in r.test_values %}
+        {{ loop.index0 }}: return 16'h{{ v | hex4 }};
+{% endfor %}
+        default: return 16'h0000;
+      endcase
+{% endfor %}
+    default: return 16'h0000;
+  endcase
+endfunction
+
+// Coverage bins that apply to each command. Kinds are defined in tb_pmbus.
+function automatic bit cov_applicable(input [7:0] c, input int kind);
+  int acc;
+  acc = reg_access(c);
+  if (acc < 0) return (kind == K_UNSUP_RD) || (kind == K_UNSUP_WR);
+  case (kind)
+    K_RD, K_RD_PEC:                  return acc != ACC_SEND;
+    K_WR, K_WR_PEC, K_WR_BADPEC,
+    K_WR_BADLEN:                     return acc == ACC_RW || acc == ACC_W1C_HW || acc == ACC_SEND;
+    K_WR_REJECT:                     return acc == ACC_RO_CONST || acc == ACC_RO_HW;
+    K_RD_REJECT:                     return acc == ACC_SEND;
+    default:                         return 1'b0;
+  endcase
+endfunction
