@@ -1,3 +1,5 @@
+[![ci](https://github.com/KaushikApp123/pmbus-power-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/KaushikApp123/pmbus-power-manager/actions/workflows/ci.yml)
+
 # PMBus Power Manager IP
 
 A PMBus target (an SMBus/I2C device) written in SystemVerilog. It supervises
